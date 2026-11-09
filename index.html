@@ -25,6 +25,11 @@
   @keyframes slide { 0%{transform:translateX(160%)} 100%{transform:translateX(-260%)} }
   .t { font-size:18px; font-weight:600; letter-spacing:.3px; }
   .s { font-size:13px; color:#555; }
+  /* زرار احتياطى للكمبيوتر بس: لو الإطار ظهر فيه خطأ جوجل (401) يفتح التطبيق مباشرة */
+  #direct { display:none; position:fixed; left:10px; bottom:10px; z-index:3; padding:6px 12px; border-radius:16px;
+            background:rgba(17,17,17,.75); color:#fff; font:13px system-ui,"Segoe UI",Tahoma,sans-serif; text-decoration:none; }
+  #direct:hover { background:var(--green); }
+  @media (min-width:900px) and (pointer:fine) { #direct { display:block; } }
 </style>
 </head>
 <body>
@@ -37,12 +42,18 @@
 <iframe id="app" title="GSH Maintenance"
         allow="camera; microphone; geolocation; clipboard-read; clipboard-write; fullscreen"
         allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+<a id="direct" target="_top" title="لو ظهر خطأ 401 دوس هنا">فتح مباشر ↗</a>
 <script>
   // رابط التطبيق الأصلى (Apps Script /exec). لو عملت Deploy جديد بلينك مختلف غيّر السطر ده بس.
   var APP_URL = 'https://script.google.com/macros/s/AKfycbwzJ_gI18hLDaTTtogeWoOiiGJGgvXV75FWRIIHUVt2L51JD-ZRVI4gYMAocz2bUmcmbA/exec';
   // بيعدّى ?asset=... و ?req=... للتطبيق عشان الـ QR ولينكات الطلبات تفتح على الماكينة/الطلب الصح
   var f = document.getElementById('app'), sp = document.getElementById('splash');
-  f.src = APP_URL + (location.search || '');
+  // ?direct=1 : يفتح التطبيق مباشرة من غير إطار (حل خطأ 401 على كمبيوتر فيه أكتر من حساب جوجل)
+  var q = new URLSearchParams(location.search), direct = q.has('direct'); q.delete('direct');
+  var qs = q.toString(), target = APP_URL + (qs ? '?' + qs : '');
+  document.getElementById('direct').href = target;
+  if (direct) { location.replace(target); }
+  else { f.src = target; }
   f.addEventListener('load', function(){ setTimeout(function(){ sp.className = 'hide'; }, 300); });
   setTimeout(function(){ sp.className = 'hide'; }, 8000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
