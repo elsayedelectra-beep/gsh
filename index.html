@@ -30,16 +30,6 @@
             background:rgba(17,17,17,.75); color:#fff; font:13px system-ui,"Segoe UI",Tahoma,sans-serif; text-decoration:none; }
   #direct:hover { background:var(--green); }
   @media (min-width:900px) and (pointer:fine) { #direct { display:block; } }
-  /* شريط تفعيل الإشعارات (بيظهر للفنيين بس، مرة واحدة) */
-  #pushBar { display:none; position:fixed; top:calc(8px + env(safe-area-inset-top)); left:8px; right:8px; z-index:4; align-items:center; gap:10px;
-             padding:10px 12px; border-radius:14px; background:#111; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.35);
-             font:14px/1.5 system-ui,"Segoe UI",Tahoma,sans-serif; }
-  #pushBar.on { display:flex; }
-  #pushBar .tx { flex:1; }
-  #pushBar b { display:block; font-size:15px; }
-  #pushBar button { border:0; border-radius:10px; padding:9px 14px; font:700 14px system-ui,"Segoe UI",Tahoma,sans-serif; cursor:pointer; }
-  #pushGo { background:#1b7a3a; color:#fff; }
-  #pushNo { background:transparent; color:#bbb; padding:9px 6px !important; font-size:18px !important; }
 </style>
 </head>
 <body>
@@ -52,7 +42,6 @@
 <iframe id="app" title="GSH Maintenance"
         allow="camera; microphone; geolocation; clipboard-read; clipboard-write; fullscreen"
         allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
-<div id="pushBar" role="alert"><div class="tx"><b id="pushT"></b><span id="pushS"></span></div><button id="pushGo" type="button">تفعيل</button><button id="pushNo" type="button" aria-label="إغلاق">×</button></div>
 <a id="direct" target="_top" title="لو ظهر خطأ 401 دوس هنا">فتح مباشر ↗</a>
 <script>
   // رابط التطبيق الأصلى (Apps Script /exec). لو عملت Deploy جديد بلينك مختلف غيّر السطر ده بس.
@@ -68,82 +57,6 @@
   f.addEventListener('load', function(){ setTimeout(function(){ sp.className = 'hide'; }, 300); });
   setTimeout(function(){ sp.className = 'hide'; }, 8000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
-
-  // ---------- إشعارات والتطبيق مقفول (Firebase Cloud Messaging) ----------
-  // الإعدادات (مفاتيح Firebase العامة) بتيجى من التطبيق نفسه، وهو بياخدها من تاب App_Settings فى الشيت،
-  // فالصفحة دى مافيهاش أى مفاتيح. الصفحة بتطلب الإذن، بتاخد رقم الجهاز (token) وتديه للتطبيق يسجله فى الشيت.
-  var PUSH = {cfg:null, role:'', src:null, origin:'', token:'', state:'', busy:false, sdk:null};
-  var FB_VER = '10.14.1';
-  function lsGet(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
-  function lsSet(k,v){ try { localStorage.setItem(k, v); } catch(e){} }
-  function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
-  function isStandalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  function pushTell(){ if (PUSH.src) { try { PUSH.src.postMessage({gsh:1, type:'push', state:PUSH.state, token:PUSH.token}, PUSH.origin); } catch(e){} } }
-  function pushBar(title, sub, canGo){
-    var b = document.getElementById('pushBar');
-    if (!title){ b.className = ''; return; }
-    document.getElementById('pushT').textContent = title; document.getElementById('pushS').textContent = sub || '';
-    document.getElementById('pushGo').style.display = canGo ? '' : 'none'; b.className = 'on';
-  }
-  function pushSnoozed(){ return Date.now() < Number(lsGet('gshPushSnooze') || 0); }
-  document.getElementById('pushNo').onclick = function(){ lsSet('gshPushSnooze', String(Date.now() + 3*864e5)); pushBar(''); };
-  document.getElementById('pushGo').onclick = function(){   // لازم الضغطة تكون هنا (الآيفون مايسمحش بطلب الإذن من غير ضغطة)
-    pushBar('');
-    try {
-      var p = Notification.requestPermission(function(r){ pushAfterAsk(r); });
-      if (p && p.then) p.then(pushAfterAsk).catch(function(){});
-    } catch(e){}
-  };
-  function pushAfterAsk(r){
-    if (r === 'granted') pushToken();
-    else if (r === 'denied'){ PUSH.state = 'denied'; pushTell(); }
-  }
-  function loadScript(src){ return new Promise(function(ok, no){ var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function(){ no(new Error('load ' + src)); }; document.head.appendChild(s); }); }
-  function pushSdk(){
-    if (!PUSH.sdk) PUSH.sdk = loadScript('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-app-compat.js')
-      .then(function(){ return loadScript('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-messaging-compat.js'); })
-      .then(function(){ var c = PUSH.cfg; if (!firebase.apps.length) firebase.initializeApp({apiKey:c.apiKey, projectId:c.projectId, messagingSenderId:c.messagingSenderId, appId:c.appId}); return firebase.messaging(); });
-    PUSH.sdk.catch(function(){ PUSH.sdk = null; });
-    return PUSH.sdk;
-  }
-  function pushToken(){
-    if (PUSH.busy || !PUSH.cfg) return; PUSH.busy = true;
-    Promise.all([pushSdk(), navigator.serviceWorker.ready]).then(function(a){
-      return a[0].getToken({vapidKey: PUSH.cfg.vapidKey, serviceWorkerRegistration: a[1]});
-    }).then(function(t){
-      PUSH.busy = false;
-      if (t){ PUSH.token = t; PUSH.state = 'granted'; } else PUSH.state = 'error';
-      pushTell();
-    }).catch(function(e){ PUSH.busy = false; PUSH.state = 'error'; PUSH.err = String(e && e.message || e).slice(0, 200); pushTell(); });
-  }
-  function pushInit(){
-    var c = PUSH.cfg;
-    if (!c || !c.apiKey || !c.projectId || !c.messagingSenderId || !c.appId || !c.vapidKey){ PUSH.state = 'off'; return; }
-    if (PUSH.role === 'op'){ PUSH.state = 'op'; pushBar(''); return; }       // المشغلين مش محتاجين إشعارات الطلبات
-    var ok = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
-    if (!ok){
-      if (isIOS() && !isStandalone()){ PUSH.state = 'ios-install';
-        if (PUSH.role === 'tech' && !pushSnoozed()) pushBar('عشان توصلك الإشعارات على الآيفون', 'من Safari: دوس زرار المشاركة ⬆ ثم "Add to Home Screen"، وافتح التطبيق من الأيقونة الجديدة.', false); }
-      else PUSH.state = 'unsupported';
-      pushTell(); return;
-    }
-    if (Notification.permission === 'granted'){ pushBar(''); pushToken(); return; }
-    if (Notification.permission === 'denied'){ PUSH.state = 'denied'; pushTell(); return; }
-    PUSH.state = 'default'; pushTell();
-    if (PUSH.role === 'tech' && !pushSnoozed()) pushBar('🔔 فعّل إشعارات طلبات الإصلاح', 'يوصلك الطلب الجديد حتى والتطبيق مقفول.', true);
-  }
-  window.addEventListener('message', function(e){
-    var d = e.data;
-    if (!d || d.gsh !== 1) return;
-    if (!/^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/.test(e.origin)) return;     // التطبيق نفسه بس (إطار Apps Script)
-    PUSH.src = e.source; PUSH.origin = e.origin;
-    if (d.type === 'hello'){ PUSH.cfg = d.push || null; PUSH.role = String(d.role || ''); pushInit(); }
-  });
-  // الضغط على الإشعار والتطبيق مفتوح: افتح الماكينة / الطلب
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function(e){
-    var u = e.data && e.data.gshOpen;
-    if (u && String(u).indexOf(location.origin + '/') === 0 && u !== location.href) location.href = u;
-  });
 </script>
 </body>
 </html>
