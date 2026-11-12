@@ -47,6 +47,11 @@
             background:rgba(17,17,17,.75); color:#fff; font:13px system-ui,"Segoe UI",Tahoma,sans-serif; text-decoration:none; }
   #direct:hover { background:var(--green); }
   @media (min-width:900px) and (pointer:fine) { #direct { display:block; } }
+  /* رسالة زرار الرجوع */
+  #backToast { position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%) translateY(10px);
+               background:rgba(17,17,17,.88); color:#fff; padding:10px 18px; border-radius:22px; font:600 14px system-ui,"Segoe UI",Tahoma,sans-serif;
+               opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:5; white-space:nowrap; }
+  #backToast.on { opacity:1; transform:translateX(-50%); }
 </style>
 </head>
 <body>
@@ -93,6 +98,7 @@
 <iframe id="app" title="GSH Maintenance"
         allow="camera; microphone; geolocation; clipboard-read; clipboard-write; fullscreen"
         allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+<div id="backToast">اضغط رجوع مرة تانية للخروج</div>
 <a id="direct" target="_top" title="لو ظهر خطأ 401 دوس هنا">فتح مباشر ↗</a>
 <script>
   // رابط التطبيق الأصلى (Apps Script /exec). لو عملت Deploy جديد بلينك مختلف غيّر السطر ده بس.
@@ -142,6 +148,34 @@
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
+  })();
+  // ---- زرار الرجوع فى الموبايل ----
+  // الصفحة دى ماسكة تاريخ المتصفح: بنحط خطوة "حارس" واحدة. لما الحارس يتشال (رجوع) بنسأل التطبيق:
+  // يقفل النافذة المفتوحة / يرجع لصفحة طلب الإصلاح (ونرجّع الحارس)، ولو هو أصلاً فيها -> رسالة، ورجوع تانى خلال 2.5 ثانية يخرج.
+  (function(){
+    if (direct || !history.pushState) return;
+    var armed = false, wait = null, seq = 0, exitT = null, bt = document.getElementById('backToast');
+    function arm(){ if (armed) return; try { history.pushState({gshGuard: 1}, ''); armed = true; } catch(e){} }
+    function postAll(w, m){ try { w.postMessage(m, '*'); } catch(e){} try { for (var i = 0; i < w.length; i++) postAll(w[i], m); } catch(e){} }
+    function exitArm(){
+      clearTimeout(exitT); bt.className = 'on';
+      exitT = setTimeout(function(){ exitT = null; bt.className = ''; arm(); }, 2500);   // ما ضغطش تانى -> نرجّع الحارس
+    }
+    function result(r){
+      if (!wait) return; clearTimeout(wait.t); wait = null;
+      if (r === 'exit') exitArm(); else arm();
+    }
+    window.addEventListener('message', function(e){
+      var d = e.data; if (!d) return;
+      if (d.gshApp && !exitT) arm();                       // التطبيق اتحمّل / المستخدم لمس الشاشة
+      if (d.gshBackRes && wait && d.id === wait.id) result(d.gshBackRes);
+    });
+    window.addEventListener('popstate', function(){
+      armed = false;
+      if (exitT) return;                                   // (احتياط) الرجوع التانى بيخرج لوحده
+      var id = ++seq; wait = { id: id, t: setTimeout(function(){ if (wait && wait.id === id) result('exit'); }, 700) };
+      postAll(f.contentWindow, { gshBack: 1, id: id });
+    });
   })();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 </script>
