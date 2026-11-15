@@ -43,6 +43,10 @@
   @keyframes spFlash { 0%,100%{opacity:1} 50%{opacity:.35} }
   @media (prefers-reduced-motion:reduce) { #splash * { animation-duration:.01ms !important; animation-delay:0s !important; transition:none !important; } }
   /* زرار احتياطى للكمبيوتر بس: لو الإطار ظهر فيه خطأ جوجل (401) يفتح التطبيق مباشرة */
+  #fallback { display:none; position:fixed; left:12px; right:12px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:5; background:#0b0d0c; color:#fff; border-radius:14px; padding:14px; text-align:center; font-family:Cairo,system-ui,sans-serif; direction:rtl; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+  #fallback.on { display:flex; flex-direction:column; gap:6px; align-items:center; }
+  #fallback span { font-size:13px; color:#cfd8d3; }
+  #fallback a { margin-top:4px; background:#16a352; color:#fff; text-decoration:none; font-weight:700; padding:9px 18px; border-radius:10px; }
   #direct { display:none; position:fixed; left:10px; bottom:10px; z-index:3; padding:6px 12px; border-radius:16px;
             background:rgba(17,17,17,.75); color:#fff; font:13px system-ui,"Segoe UI",Tahoma,sans-serif; text-decoration:none; }
   #direct:hover { background:var(--green); }
@@ -100,6 +104,7 @@
         allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
 <div id="backToast">اضغط رجوع مرة تانية للخروج</div>
 <a id="direct" target="_top" title="لو ظهر خطأ 401 دوس هنا">فتح مباشر ↗</a>
+<div id="fallback"><b>التطبيق مش بيفتح؟</b><span>هيفتح مباشر لوحده كمان ثواني…</span><a id="fbGo" target="_top">افتح مباشر دلوقتي</a></div>
 <script>
   // رابط التطبيق الأصلى (Apps Script /exec). لو عملت Deploy جديد بلينك مختلف غيّر السطر ده بس.
   var APP_URL = 'https://script.google.com/macros/s/AKfycbwzJ_gI18hLDaTTtogeWoOiiGJGgvXV75FWRIIHUVt2L51JD-ZRVI4gYMAocz2bUmcmbA/exec';
@@ -107,10 +112,23 @@
   var f = document.getElementById('app'), sp = document.getElementById('splash');
   // ?direct=1 : يفتح التطبيق مباشرة من غير إطار (حل خطأ 401 على كمبيوتر فيه أكتر من حساب جوجل)
   var q = new URLSearchParams(location.search), direct = q.has('direct'); q.delete('direct');
+  // v78: موبايل التطبيق مافتحش جوه الإطار قبل كده (كوكيز جوجل ممنوعة) -> يفتح مباشر على طول. ?frame=1 يرجّعه للإطار.
+  function lsG(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsS(k, v){ try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch(e){} }
+  if (q.has('frame')) { q.delete('frame'); lsS('gshDirect', ''); }
+  else if (lsG('gshDirect') === '1') direct = true;
   var qs = q.toString(), target = APP_URL + (qs ? '?' + qs : '');
-  document.getElementById('direct').href = target;
+  document.getElementById('direct').href = target; document.getElementById('fbGo').href = target;
   if (direct) { location.replace(target); }
   else { f.src = target; }
+  // v78 (16-Nov-2026): لو التطبيق ما قالش "أنا اشتغلت" خلال 15 ثانية (غالباً الإطار ممنوع على الموبايل ده)
+  // يظهر زرار "افتح مباشر"، ولو لسه مافتحش بعد 25 ثانية يفتح مباشر لوحده ويفتكر ده للمرات الجاية.
+  var appOk = false;
+  window.addEventListener('message', function(e){ if (e.data && e.data.gshApp) { appOk = true; var fb = document.getElementById('fallback'); if (fb) fb.className = ''; } });
+  if (!direct) {
+    setTimeout(function(){ if (!appOk) document.getElementById('fallback').className = 'on'; }, 15000);
+    setTimeout(function(){ if (!appOk) { lsS('gshDirect', '1'); location.replace(target); } }, 25000);
+  }
   // ---- شاشة الافتتاح: بتشتغل وقت تحميل التطبيق، وتختفى أول ما يحمّل (بعد 2.6 ثانية على الأقل) ----
   var loaded=false, gone=false, MIN=2.6;
   function hideSplash(){ if(gone) return; gone=true; sp.className='hide'; setTimeout(function(){ sp.className='hide gone'; },400); }
