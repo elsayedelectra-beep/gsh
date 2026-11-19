@@ -89,6 +89,23 @@
   var f = document.getElementById('app'), sp = document.getElementById('splash');
   // ?direct=1 : يفتح التطبيق مباشرة من غير إطار (حل خطأ 401 على كمبيوتر فيه أكتر من حساب جوجل)
   var q = new URLSearchParams(location.search), direct = q.has('direct'); q.delete('direct');
+  // v103 (19-Nov-2026): فتح من تليجرام كـ Mini App (من غير رسالة "Open Link").
+  // اللينك t.me/<bot>?startapp=rq_RR-2611-053 -> تليجرام بيبعت tgWebAppStartParam -> نحوّله لـ ?rq=RR-2611-053 زى زمان.
+  var inTg = false;
+  (function(){
+    var h = new URLSearchParams((location.hash || '').replace(/^#/, '')), sp = q.get('tgWebAppStartParam') || '';
+    if (h.has('tgWebAppData') || q.has('tgWebAppStartParam')) inTg = true;
+    if (!sp && h.has('tgWebAppData')) { try { sp = new URLSearchParams(h.get('tgWebAppData')).get('start_param') || ''; } catch(e){} }
+    q.delete('tgWebAppStartParam');
+    var m = /^(rq|wo|ob|asset)_([A-Za-z0-9-]{1,40})$/.exec(sp);
+    if (m && !q.has(m[1])) q.set(m[1], m[2]);
+    if (inTg) {
+      var s = document.createElement('script'); s.src = 'https://telegram.org/js/telegram-web-app.js';
+      s.onload = function(){ try { var w = window.Telegram && Telegram.WebApp; if (!w) return; w.ready(); w.expand();
+        if (w.disableVerticalSwipes) w.disableVerticalSwipes(); } catch(e){} };
+      document.head.appendChild(s);
+    }
+  })();
   // v78: موبايل التطبيق مافتحش جوه الإطار قبل كده (كوكيز جوجل ممنوعة) -> يفتح مباشر على طول. ?frame=1 يرجّعه للإطار.
   function lsG(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lsS(k, v){ try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch(e){} }
@@ -152,7 +169,7 @@
   // الصفحة دى ماسكة تاريخ المتصفح: بنحط خطوة "حارس" واحدة. لما الحارس يتشال (رجوع) بنسأل التطبيق:
   // يقفل النافذة المفتوحة / يرجع لصفحة طلب الإصلاح (ونرجّع الحارس)، ولو هو أصلاً فيها -> رسالة، ورجوع تانى خلال 2.5 ثانية يخرج.
   (function(){
-    if (direct || !history.pushState) return;
+    if (direct || inTg || !history.pushState) return;   // جوه تليجرام زرار الرجوع بتاع تليجرام بيقفل النافذة
     var armed = false, wait = null, seq = 0, exitT = null, bt = document.getElementById('backToast');
     function arm(){ if (armed) return; try { history.pushState({gshGuard: 1}, ''); armed = true; } catch(e){} }
     function postAll(w, m){ try { w.postMessage(m, '*'); } catch(e){} try { for (var i = 0; i < w.length; i++) postAll(w[i], m); } catch(e){} }
