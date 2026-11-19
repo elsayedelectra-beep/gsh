@@ -92,8 +92,12 @@
   // v78: موبايل التطبيق مافتحش جوه الإطار قبل كده (كوكيز جوجل ممنوعة) -> يفتح مباشر على طول. ?frame=1 يرجّعه للإطار.
   function lsG(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lsS(k, v){ try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch(e){} }
-  if (q.has('frame')) { q.delete('frame'); lsS('gshDirect', ''); }
-  else if (lsG('gshDirect') === '1') direct = true;
+  // v105 (19-Nov-2026): "يفتح مباشر" بقى مؤقت: بيتفتكر بس لو التطبيق فشل فى الإطار مرتين ورا بعض، ولمدة 12 ساعة بس.
+  // قبل كده كان بيتفتكر للأبد بعد أول مرة تحميل بطيء -> زرار الرجوع (اللى محتاج الإطار) بطل يشتغل على الموبايل ده.
+  var DIRECT_MS = 12 * 3600 * 1000;
+  if (q.has('frame')) { q.delete('frame'); lsS('gshDirect', ''); lsS('gshFrameFail', ''); }
+  else { var dv = lsG('gshDirect'), dt = dv && /^\d{10,}$/.test(dv) ? +dv : 0;
+         if (dt && Date.now() - dt < DIRECT_MS) direct = true; else if (dv) lsS('gshDirect', ''); }
   var qs = q.toString(), target = APP_URL + (qs ? '?' + qs : '');
   document.getElementById('direct').href = target; document.getElementById('fbGo').href = target;
   if (direct) { location.replace(target); }
@@ -101,10 +105,13 @@
   // v78 (16-Nov-2026): لو التطبيق ما قالش "أنا اشتغلت" خلال 15 ثانية (غالباً الإطار ممنوع على الموبايل ده)
   // يظهر زرار "افتح مباشر"، ولو لسه مافتحش بعد 25 ثانية يفتح مباشر لوحده ويفتكر ده للمرات الجاية.
   var appOk = false;
-  window.addEventListener('message', function(e){ if (e.data && e.data.gshApp) { appOk = true; var fb = document.getElementById('fallback'); if (fb) fb.className = ''; } });
+  window.addEventListener('message', function(e){ if (e.data && e.data.gshApp) { if (!appOk) lsS('gshFrameFail', ''); appOk = true; var fb = document.getElementById('fallback'); if (fb) fb.className = ''; } });
   if (!direct) {
     setTimeout(function(){ if (!appOk) document.getElementById('fallback').className = 'on'; }, 15000);
-    setTimeout(function(){ if (!appOk) { lsS('gshDirect', '1'); location.replace(target); } }, 25000);
+    setTimeout(function(){ if (!appOk) {
+      var n = (+lsG('gshFrameFail') || 0) + 1; lsS('gshFrameFail', String(n));
+      if (n >= 2) { lsS('gshDirect', String(Date.now())); lsS('gshFrameFail', ''); }   // فشل مرتين ورا بعض -> مباشر 12 ساعة
+      location.replace(target); } }, 30000);
   }
   // ---- شاشة الافتتاح (v3, 18-Nov-2026): فولتميتر + عداد ضغط + اللوجو بلمعة ضوء. بتشتغل وقت تحميل التطبيق وتختفى أول ما يحمّل (2.4 ثانية على الأقل) ----
   var loaded=false, gone=false, MIN=2.4;
