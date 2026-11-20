@@ -155,19 +155,21 @@
     }
     requestAnimationFrame(tick);
   })();
-  // ---- زرار الرجوع فى الموبايل (v107, 20-Nov-2026) ----
-  // كروم على الموبايل بيتجاهل خطوة التاريخ اللى الصفحة بتضيفها من غير لمسة من المستخدم (وبيعلّم الخطوة اللى قبلها "تتنط")،
-  // واللمس جوه التطبيق (الإطار) مابيلغيش العلامة دى. فكنا بنحط الحارس أول ما التطبيق يحمّل -> رجوع واحد يخرج على طول.
-  // دلوقتى: الحراس بيتحطوا بس واحنا جوه لمسة حقيقية (navigator.userActivation.isActive)، ولحد 3 حراس عشان كام رجوع ورا بعض يشتغلوا.
-  // الرجوع: التطبيق يقفل النافذة / يرجع لطلب الإصلاح؛ لو هو أصلاً فيها -> نرجع لأول خطوة ونظهر الرسالة، ورجوع تانى يخرج.
+  // ---- زرار الرجوع فى الموبايل (v108, 20-Nov-2026) ----
+  // كروم على الموبايل بيتجاهل خطوة التاريخ اللى الصفحة بتضيفها من غير لمسة من المستخدم، فالحراس بيتحطوا بس جوه لمسة حقيقية
+  // (navigator.userActivation.isActive)، لحد 4 حراس. بعد كده مش بنضيف تانى: بنمشى قدام/ورا بين نفس الحراس (history.go) ودى مش محتاجة لمسة.
+  // رجوع: التطبيق يقفل النافذة / يرجع لطلب الإصلاح -> نرجع خطوة لقدام (العدد يفضل زى ما هو).
+  // لو هو أصلاً فى طلب الإصلاح -> نروح لأول خطوة ونظهر الرسالة؛ رجوع تانى خلال 2.5 ثانية يخرج، ولو ماضغطش نرجع لقدام والحماية ترجع.
   (function(){
     if (direct || !history.pushState) return;
-    var MAX = 3, wait = null, seq = 0, exitT = null, ignorePop = 0, poll = null, bt = document.getElementById('backToast');
+    var MAX = 4, hi = 0, wait = null, seq = 0, exitT = null, ign = null, poll = null, bt = document.getElementById('backToast');
     function depth(){ var st = history.state; return (st && st.gshGuard) || 0; }
-    function active(){ var ua = navigator.userActivation; return !ua || ua.isActive; }   // متصفح من غير الخاصية دى: زى الأول
+    function active(){ var ua = navigator.userActivation; return !ua || ua.isActive; }
+    function go(n){ if (!n) return; ign = { to: depth() + n, t: setTimeout(function(){ ign = null; }, 800) }; try { history.go(n); } catch(e){ ign = null; } }
     function top(){                                     // نكمّل الحراس لحد MAX، بس جوه لمسة
-      if (exitT || wait || !active()) return false;
-      try { for (var d = depth(); d < MAX; d++) history.pushState({gshGuard: d + 1}, ''); } catch(e){}
+      if (exitT || wait || ign || !active()) return false;
+      var d = depth(); if (d >= MAX) { hi = Math.max(hi, d); return true; }
+      try { for (; d < MAX; d++) history.pushState({gshGuard: d + 1}, ''); hi = MAX; } catch(e){}
       return true;
     }
     function soon(){                                    // اللمس بيتحسب لمسة بعد ما الصباع يترفع -> نجرب كام مرة
@@ -175,15 +177,16 @@
       if (top()) return;
       poll = setInterval(function(){ if (top() || ++n > 15) clearInterval(poll); }, 100);
     }
+    function restore(){ var d = depth(); if (d < hi) go(1); else top(); }   // نرجّع حارس من غير ما نحتاج لمسة
     function postAll(w, m){ try { w.postMessage(m, '*'); } catch(e){} try { for (var i = 0; i < w.length; i++) postAll(w[i], m); } catch(e){} }
     function exitArm(){
-      var d = depth(); if (d > 0) { ignorePop++; history.go(-d); }   // نقف على أول خطوة -> الرجوع الجاى يخرج فعلاً
+      go(-depth());                                     // أول خطوة -> الرجوع الجاى يخرج فعلاً
       clearTimeout(exitT); bt.className = 'on';
-      exitT = setTimeout(function(){ exitT = null; bt.className = ''; top(); }, 2500);
+      exitT = setTimeout(function(){ exitT = null; bt.className = ''; restore(); }, 2500);
     }
     function result(r){
       if (!wait) return; clearTimeout(wait.t); wait = null;
-      if (r === 'exit') exitArm(); else top();
+      if (r === 'exit') exitArm(); else restore();
     }
     window.addEventListener('message', function(e){
       var d = e.data; if (!d) return;
@@ -192,7 +195,7 @@
     });
     window.addEventListener('pointerup', soon, true);
     window.addEventListener('popstate', function(){
-      if (ignorePop) { ignorePop--; return; }
+      if (ign) { var hit = depth() === ign.to; clearTimeout(ign.t); ign = null; if (hit) return; }
       if (exitT) return;
       var id = ++seq; wait = { id: id, t: setTimeout(function(){ if (wait && wait.id === id) result('exit'); }, 700) };
       postAll(f.contentWindow, { gshBack: 1, id: id });
@@ -201,7 +204,7 @@
   // ?dbg=1 : سطر صغير تحت يوضح حالة زرار الرجوع (للتشخيص من الموبايل)
   if (DBG) { var dg = document.createElement('div'); dg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:12px monospace;padding:3px 6px;direction:ltr';
     document.body.appendChild(dg); var pops = 0, msgs = 0; addEventListener('popstate', function(){ pops++; }); addEventListener('message', function(e){ if (e.data && (e.data.gshApp || e.data.gshBackRes)) msgs++; });
-    setInterval(function(){ var ua = navigator.userActivation; dg.textContent = 'v107 direct:' + direct + ' guard:' + ((history.state && history.state.gshGuard) || 0) + ' len:' + history.length +
+    setInterval(function(){ var ua = navigator.userActivation; dg.textContent = 'v108 direct:' + direct + ' guard:' + ((history.state && history.state.gshGuard) || 0) + ' len:' + history.length +
       ' act:' + (ua ? (ua.isActive ? 'Y' : 'n') + '/' + (ua.hasBeenActive ? 'Y' : 'n') : 'NA') + ' msg:' + msgs + ' pop:' + pops + ' pwa:' + (matchMedia('(display-mode: standalone)').matches ? 'Y' : 'n'); }, 300); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 </script>
