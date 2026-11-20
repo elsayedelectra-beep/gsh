@@ -88,7 +88,7 @@
   // بيعدّى ?asset=... و ?req=... للتطبيق عشان الـ QR ولينكات الطلبات تفتح على الماكينة/الطلب الصح
   var f = document.getElementById('app'), sp = document.getElementById('splash');
   // ?direct=1 : يفتح التطبيق مباشرة من غير إطار (حل خطأ 401 على كمبيوتر فيه أكتر من حساب جوجل)
-  var q = new URLSearchParams(location.search), direct = q.has('direct'); q.delete('direct');
+  var q = new URLSearchParams(location.search), direct = q.has('direct'); q.delete('direct'); var DBG = q.has('dbg'); q.delete('dbg');
   // v78: موبايل التطبيق مافتحش جوه الإطار قبل كده (كوكيز جوجل ممنوعة) -> يفتح مباشر على طول. ?frame=1 يرجّعه للإطار.
   function lsG(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lsS(k, v){ try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch(e){} }
@@ -198,6 +198,11 @@
       postAll(f.contentWindow, { gshBack: 1, id: id });
     });
   })();
+  // ?dbg=1 : سطر صغير تحت يوضح حالة زرار الرجوع (للتشخيص من الموبايل)
+  if (DBG) { var dg = document.createElement('div'); dg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:12px monospace;padding:3px 6px;direction:ltr';
+    document.body.appendChild(dg); var pops = 0, msgs = 0; addEventListener('popstate', function(){ pops++; }); addEventListener('message', function(e){ if (e.data && (e.data.gshApp || e.data.gshBackRes)) msgs++; });
+    setInterval(function(){ var ua = navigator.userActivation; dg.textContent = 'v107 direct:' + direct + ' guard:' + ((history.state && history.state.gshGuard) || 0) + ' len:' + history.length +
+      ' act:' + (ua ? (ua.isActive ? 'Y' : 'n') + '/' + (ua.hasBeenActive ? 'Y' : 'n') : 'NA') + ' msg:' + msgs + ' pop:' + pops + ' pwa:' + (matchMedia('(display-mode: standalone)').matches ? 'Y' : 'n'); }, 300); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 </script>
 </body>
